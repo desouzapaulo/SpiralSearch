@@ -42,10 +42,10 @@ class SpiralSearchClass:
         self.f3 = F3                    # number of levels
         self.f4 = F4                    # angle increment for centroid interpolation
         self.f5 = F5                    # angle in centroid extrapolation where frame is incremented
-        self.f6 = F6                    # frame limit to centroid calculation without search functions 
+        self.f6 = F6*F3                 # frame limit to centroid calculation without search functions 
         self.f7 = F7*h                  # centroid maximum norm to be considered in the middle
         self.f8 = F8                    # percentage of level jump for centroid extrapolation
-        self.f9 = F9                    # max number of levels to extrapolate a centroid directly upwards 
+        self.f9 = F9*F3                    # max number of levels to extrapolate a centroid directly upwards 
         self.f10 = F10                  # max angle of backward rotation allowed
         self.f11 = F11                  # wave search 
         self.f12 = F12                  # cut angle
