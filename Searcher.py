@@ -2,6 +2,7 @@ import csv
 import numpy as np
 from vispy import app, scene
 import imageio
+import pandas as pd
 
 # pip intall numpy
 # pip install vispy
@@ -32,8 +33,9 @@ class SpiralSearchClass:
         self.angle_key = 0
         self.angle_amp = 0
         self.level_cut = False
+        self.P = SpiralPropsClass()
 
-    def SET_parameters(self, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12):
+    def SET_parameters(self, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, F13):
         h = self.Zheight - self.Zfloor  # Height of the spiral
         self.f1 = F1*h                  # thickness of the disc found at certain level
         self.f2 = F2*h                  # maximum radius of the points around the last centroid
@@ -47,12 +49,14 @@ class SpiralSearchClass:
         self.f10 = F10                  # max angle of backward rotation allowed
         self.f11 = F11                  # wave search 
         self.f12 = F12                  # cut angle
+        self.f13 = F13
 
     def SET_graphics(self, s1, c1, s2, c2, s3, c3):
         self.canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='gray')
         self.scatter = scene.visuals.Markers()
         self.scatter1 = scene.visuals.Markers()
         self.scatter2 = scene.visuals.Markers()
+        self.scatter3 = scene.visuals.Markers()
         self.view = self.canvas.central_widget.add_view()
         self.axis = scene.visuals.XYZAxis(parent=self.view.scene)
         self.view.camera = 'turntable'
@@ -229,7 +233,7 @@ class SpiralSearchClass:
             zone_cut = False
 
             if middle_centroid:
-                    if np.rad2deg(angle) > self.f12 and perc_h > 0.5:
+                    if np.rad2deg(angle) > self.f12 and perc_h > self.f13:
                         print(f"Angle of extrapolation exceeded {self.f12}°, centroid search will be finished")
                         self.level_cut = True
                     self.frame_count += 1
@@ -287,6 +291,9 @@ class SpiralSearchClass:
                 self.frame_count += 1
 
             elif self.f6 <= self.frame_count and self.frame_count < (np.size(self.levels)-1):
+                if self.level_cut:
+                    print("Spiral search finished")
+                    running = False
                 centroid = self.find_centroid()
                 self.coords = np.append(self.coords, centroid, axis=0)
             else:
@@ -322,7 +329,7 @@ class SpiralSearchClass:
             self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
             self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
             self.canvas.update()
-            # update frame count
+            # update frame count        
             self.frame_count += 1
 
         elif self.f6 <= self.frame_count and self.frame_count < (np.size(self.levels)-1):
@@ -330,15 +337,15 @@ class SpiralSearchClass:
                 self.canvas.update()
                 print("Animation finished")
                 self.timer.stop()
-            centroid = self.find_centroid()
-            print(f"Frame {self.frame_count}")
-            self.coords = np.append(self.coords, centroid, axis=0)
-            # update canvas
-            self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
-            self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
-            self.canvas.update()
-        else:
-            self.canvas.update()
+            else:
+                centroid = self.find_centroid()
+                print(f"Frame {self.frame_count}")
+                self.coords = np.append(self.coords, centroid, axis=0)
+                # update canvas
+                self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
+                self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
+                self.canvas.update()
+        else:            
             print("Animation finished")
             self.timer.stop()
     
@@ -351,13 +358,16 @@ class SpiralSearchClass:
 class SpiralPropsClass:
     def __init__(self):
         self.spiral_points = None
+        self.spiral_smoothed = None
         self.spiral_length = 0.0
+
+    def read_spiral(self, filename):
+        self.spiral_points = pd.read_csv(filepath_or_buffer=filename, delimiter=';').to_numpy(dtype=float).copy()
 
     def find_spiral_length(self, span):
         self.spiral_length = 0.0
-        self.spiral_points = self.smooth_sample(sample_points=self.spiral_points)
         for step in range(0, len(self.spiral_points)-span, span):
-            sample = self.spiral_points[step:(step+span), :]
+            sample = self.spiral_smoothed[step:(step+span), :]
             self.spiral_length += self.estimate_arc_with_path(sample_points=sample)
             # dtheta = self.centroid_angle(sample[0, :], sample[-1, :])
             # dz = sample[-1, -1] - sample[0, -1]
@@ -370,18 +380,15 @@ class SpiralPropsClass:
         diffs = np.diff(pts, axis=0)
         segment_lengths = np.linalg.norm(diffs, axis=1)
         path_length = np.sum(segment_lengths)
-
         return path_length
 
-    def smooth_sample(self, sample_points, window=5):
-        pts = np.asarray(sample_points)
-        smoothed = np.copy(pts)
-
-        for i in range(len(pts)):
+    def smooth_sample(self, window=5):
+        self.spiral_smoothed = np.copy(self.spiral_points)
+        for i in range(len(self.spiral_points)):
             i_min = max(0, i - window)
-            i_max = min(len(pts), i + window)
-            smoothed[i] = pts[i_min:i_max].mean(axis=0)
-        return smoothed
+            i_max = min(len(self.spiral_points), i + window)
+            self.spiral_smoothed[i] = self.spiral_points[i_min:i_max].mean(axis=0)
+        return
         
 
         
