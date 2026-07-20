@@ -3,6 +3,9 @@ import numpy as np
 from vispy import app, scene
 import imageio
 import pandas as pd
+from SpiralSearch.SpiralLinalg import *
+
+# [TODO] create separate class or functions for basic linear algebra for spirals
 
 # pip intall numpy
 # pip install vispy
@@ -357,9 +360,11 @@ class SpiralSearchClass:
 
 class SpiralPropsClass:
     def __init__(self):
-        self.spiral_points = None
-        self.spiral_smoothed = None
+        self.spiral_points = []
+        self.spiral_smoothed = []
         self.spiral_length = 0.0
+        self.theta = []
+        self.lead = []
 
     def read_spiral(self, filename):
         self.spiral_points = pd.read_csv(filepath_or_buffer=filename, delimiter=';').to_numpy(dtype=float).copy()
@@ -383,15 +388,30 @@ class SpiralPropsClass:
         return path_length
 
     def smooth_sample(self, window=5):
-        if self.spiral_points == None
-            ValueError('Spiral points not provided for smoothing')
-        else:
-            self.spiral_smoothed = np.copy(self.spiral_points)
-            for i in range(len(self.spiral_points)):
-                i_min = max(0, i - window)
-                i_max = min(len(self.spiral_points), i + window)
-                self.spiral_smoothed[i] = self.spiral_points[i_min:i_max].mean(axis=0)
+        self.spiral_smoothed = np.copy(self.spiral_points)
+        for i in range(len(self.spiral_points)):
+            i_min = max(0, i - window)
+            i_max = min(len(self.spiral_points), i + window)
+            self.spiral_smoothed[i] = self.spiral_points[i_min:i_max].mean(axis=0)
         return
             
+    def build_angle(self):
+        ref = self.spiral_smoothed[-1, :2]
+        self.theta = np.reshape([angle(dim=2, point1=ref, point2=point) for point in self.spiral_smoothed[:, :2]], (len(self.spiral_smoothed)))
 
+    def lead_angle(self):
+        self.lead = np.zeros((len(self.theta)), dtype=float)
+        for i in range(1, len(self.theta)):
+            T = [(self.spiral_smoothed[i, j]-self.spiral_smoothed[i-1, j])/(self.theta[i]) for j in range(3)]
+            self.lead[i] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
+
+    # def lead_angle_span(self, span, s):
+    #     self.lead = np.zeros((len(self.theta)), dtype=float)
+    #     for step in range(1, (len(self.theta)-span), span):
+    #         sample = self.spiral_smoothed[step:(step+span), :]
+    #         dtheta = angle(dim=2, point1=sample[0, :2], point2=sample[-1, :2])
+            
+    #         T = [(self.spiral_smoothed[i, j]-self.spiral_smoothed[i-1, j])/(self.theta[i]) for j in range(3)]
+    #         self.lead[i] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
         
+    #     self.lead = gaussian_filter1d(self.lead, sigma=s)
