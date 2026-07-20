@@ -383,12 +383,15 @@ class SpiralPropsClass:
         return path_length
 
     def smooth_sample(self, window=5):
-        self.spiral_smoothed = np.copy(self.spiral_points)
-        for i in range(len(self.spiral_points)):
-            i_min = max(0, i - window)
-            i_max = min(len(self.spiral_points), i + window)
-            self.spiral_smoothed[i] = self.spiral_points[i_min:i_max].mean(axis=0)
+        if self.spiral_points == None
+            ValueError('Spiral points not provided for smoothing')
+        else:
+            self.spiral_smoothed = np.copy(self.spiral_points)
+            for i in range(len(self.spiral_points)):
+                i_min = max(0, i - window)
+                i_max = min(len(self.spiral_points), i + window)
+                self.spiral_smoothed[i] = self.spiral_points[i_min:i_max].mean(axis=0)
         return
-        
+            
 
         
