@@ -1,9 +1,10 @@
 import csv
 import numpy as np
 from vispy import app, scene
-import imageio
+# import imageio
 import pandas as pd
 from SpiralSearch.SpiralLinalg import *
+import os
 
 # [TODO] create separate class or functions for basic linear algebra for spirals
 
@@ -11,6 +12,11 @@ from SpiralSearch.SpiralLinalg import *
 # pip install vispy
 # pip install PySide6
 # pip install PyOpenGL PyOpenGL_accelerate
+
+
+def create_folder(root, folder_name):
+    folder_path = os.path.join(root, folder_name)
+    os.makedirs(folder_path, exist_ok=True)
 
 class SpiralSearchClass:
     def __init__(self):
@@ -36,23 +42,75 @@ class SpiralSearchClass:
         self.angle_key = 0
         self.angle_amp = 0
         self.level_cut = False
-        self.P = SpiralPropsClass()
+        self.perc_h = float
+        self.out = []
+        self.filename = ''
+        self.par_out = {}
+
+    def store_out(self, output):
+        self.out.append(output)
+    
+    def save_out(self, root):
+        name = os.path.splitext(os.path.basename(str(self.filename)))[0]
+
+        filepath = os.path.join(root, f"{name}.out")
+        with open(filepath, "w") as file:
+            for out in self.out:
+                file.write(f"{out}\n")
+
+        filepath = os.path.join(root, f"{name}_Parameters.csv")
+        with open(filepath, "w") as f:
+            for key, value in self.par_out.items():
+                f.write(f"{key};{value}\n")
+
+        filepath = os.path.join(root, f"{name}_Spiral_Points.csv")
+        np.savetxt(filepath, self.coords, delimiter=";")
 
     def SET_parameters(self, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, F13):
         h = self.Zheight - self.Zfloor  # Height of the spiral
         self.f1 = F1*h                  # thickness of the disc found at certain level
-        self.f2 = F2*h                  # maximum radius of the points around the last centroid
+        self.f2 = F2*self.r                  # maximum radius of the points around the last centroid
         self.f3 = F3                    # number of levels
         self.f4 = F4                    # angle increment for centroid interpolation
         self.f5 = F5                    # angle in centroid extrapolation where frame is incremented
         self.f6 = F6*F3                 # frame limit to centroid calculation without search functions 
-        self.f7 = F7*h                  # centroid maximum norm to be considered in the middle
+        self.f7 = F7*self.r                  # centroid maximum norm to be considered in the middle
         self.f8 = F8                    # percentage of level jump for centroid extrapolation
-        self.f9 = F9*F3                    # max number of levels to extrapolate a centroid directly upwards 
+        self.f9 = F9*F3                 # max number of levels to extrapolate a centroid directly upwards 
         self.f10 = F10                  # max angle of backward rotation allowed
         self.f11 = F11                  # wave search 
         self.f12 = F12                  # cut angle
         self.f13 = F13
+
+        self.par_out = {'F1': F1,'F2': F2,'F3': F3, 'F4': F4,'F5': F5,'F6': F6,
+                'F7': F7,'F8': F8,'F9': F9,'F10': F10,'F11': F11,'F12': F12, 'F13': F13}
+
+    def read_parameters_from_file(self, filepath):
+        parameters = []
+        with open(filepath, 'r') as file:
+                lines = file.readlines()
+                for line in lines:
+                    parameters.append(str(line).strip().split(';')[-1])
+
+        h = self.Zheight - self.Zfloor  # Height of the spiral
+        self.f1 = float(parameters[0])*h
+        self.f2 = float(parameters[1])*self.r
+        self.f3 = int(parameters[2])
+        self.f4 = int(parameters[3])
+        self.f5 = int(parameters[4])
+        self.f6 = float(parameters[5])*self.f3
+        self.f7 = float(parameters[6])*self.r
+        self.f8 = float(parameters[7])
+        self.f9 = float(parameters[8])*self.f3
+        self.f10 = float(parameters[9])
+        self.f11 = int(parameters[10])
+        self.f12 = int(parameters[11])
+        self.f13 = float(parameters[12])
+
+        self.par_out = {'F1': parameters[0],'F2': parameters[1],'F3': parameters[2], 'F4': parameters[3],
+                        'F5': parameters[4],'F6': parameters[5], 'F7': parameters[6],'F8': parameters[7],
+                        'F9': parameters[8],'F10': parameters[9],'F11': parameters[10],'F12': parameters[11],
+                          'F13': parameters[12]}
 
     def SET_graphics(self, s1, c1, s2, c2, s3, c3):
         self.canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='gray')
@@ -74,9 +132,10 @@ class SpiralSearchClass:
         self.CU_size = s3
         self.CU_color = c3
 
-    def read_file(self, filename):
+    def read_file(self, file):
+        self.filename = file
         # Read CSV file and store values into a numpy matrix
-        with open(filename, 'r') as f:
+        with open(self.filename, 'r') as f:
             reader = csv.reader(f)
             rawdata = list(reader)
         # Store csv data in a numpy matrix
@@ -86,14 +145,20 @@ class SpiralSearchClass:
             cols = str(rawdata[row][0]).split(";")
             self.CUdata[row, :] = ([float(cols[col]) for col in range(3)])
 
-        self.Zfloor = np.min(self.CUdata[:, 2])
+        
         self.Zheight = np.max(self.CUdata[:, 2])
+        if self.Zheight > 1000:
+            self.CUdata /= 1000
+            self.Zheight = np.max(self.CUdata[:, 2])
+        self.Zfloor = np.min(self.CUdata[:, 2])
         self.Ywidth = abs(np.max(self.CUdata[:, 1]) - np.min(self.CUdata[:, 1]))
         self.Xwidth = abs(np.max(self.CUdata[:, 0]) - np.min(self.CUdata[:, 0]))
 
+        if self.Zheight > 1000:
+            self.CUdata[:, 2] /= 1000
 
     def find_levels(self):
-        self.levels = np.linspace(self.Zfloor, self.Zheight, self.f3)
+        self.levels = np.linspace(self.Zfloor, self.Zheight, int(self.f3))
 
     def find_center(self):
        # Find center
@@ -106,6 +171,7 @@ class SpiralSearchClass:
         # update floor and heigth
         self.Zfloor = np.min(self.CUdata[:, 2])
         self.Zheight = np.max(self.CUdata[:, 2])
+
 
     def rotate(self, theta, vec):
         c = np.cos(theta)
@@ -183,7 +249,7 @@ class SpiralSearchClass:
             if np.linalg.norm(centroid) <= self.f7:
                 search_centroid = True
                 middle_centroid = True
-                print("Centroid is in the middle")
+                self.store_out("Centroid is in the middle")
         # store coordinate of last centroid
         last_centroid = np.reshape(self.coords[-1,:], (1,3))
         # check distance of the point found from the last centroid
@@ -195,25 +261,25 @@ class SpiralSearchClass:
         
         if mask_check != 0 and search_centroid == False: # if some point was found
             self.angle_amp = 0
-            print(f"Point close to the centroid found")
+            self.store_out(f"Point close to the centroid found")
             # find the mean coordinate of the masked data
             centroid = np.mean(self.CUdata[self.mask], axis=0).reshape(1,3)
             # check rotation of the centroid from the last one
             centroid_rot = self.find_rotation(last_centroid, centroid) # True: anti-clockwise, False: clockwise
             if centroid_rot:
-                print("Centroid rotated backward")
+                self.store_out("Centroid rotated backward")
                 rot_theta = np.rad2deg(self.centroid_angle(reference=centroid, centroid=last_centroid))
                 if rot_theta <= self.f10:
-                    print(f"True centroid found with backwards rotation of {rot_theta}")
+                    self.store_out(f"True centroid found with backwards rotation of {rot_theta}")
                     self.true_centroid = centroid
                     self.frame_count += 1
                 else:
                     if self.up_count <= self.f9:
-                        print("upward extrapolation")
+                        self.store_out("upward extrapolation")
                         centroid = last_centroid # extrapolate centroid upwards
                         self.up_count += 1
                     else:
-                        print("forward extrapolation")
+                        self.store_out("forward extrapolation")
                         self.up_count = 0
                         theta = np.deg2rad(self.f4)
                         centroid = self.centroid_search(theta) # centroid extrapolation
@@ -221,39 +287,42 @@ class SpiralSearchClass:
                     centroid[0, 2] = self.levels[self.frame_count]
                 
             else:
-                print("True centroid found")
+                self.store_out("True centroid found")
                 self.true_centroid = centroid
                 self.frame_count += 1
 
         elif mask_check == 0 or search_centroid: # no point around the last centroid was found or centroid search was activated
-            print(30*"=", ">Centroid search activated<", 30*"=")
+            self.store_out('--------------------------------')
+            self.store_out('>> Centroid search activated <<')
+            self.store_out('--------------------------------')
             theta = np.deg2rad(self.f4)
             centroid = self.centroid_search(theta) # centroid extrapolation
             angle = self.centroid_angle(self.true_centroid, centroid)
-            print(f"Extrapolation {np.rad2deg(angle)}° far from last true centroid")
-
-            perc_h = self.levels[self.frame_count]/self.Zheight
+            self.store_out(f"Extrapolation {np.rad2deg(angle)}° far from last true centroid")
+            self.perc_h = self.levels[self.frame_count]/self.Zheight
             zone_cut = False
 
             if middle_centroid:
-                    if np.rad2deg(angle) > self.f12 and perc_h > self.f13:
-                        print(f"Angle of extrapolation exceeded {self.f12}°, centroid search will be finished")
+                    if np.rad2deg(angle) > self.f12 and self.perc_h > self.f13:
+                        self.store_out(f"Angle of extrapolation exceeded {self.f12}°, centroid search will be finished")
                         self.level_cut = True
                     self.frame_count += 1
                     centroid[0, 2] = self.levels[self.frame_count]
 
             elif not zone_cut:
                 if np.rad2deg(angle) > self.f5:
-                    print(30*'-', '>Wave search activated<', 30*'-')
+                    self.store_out('--------------------------------')
+                    self.store_out('>> Wave search activated <<')
+                    self.store_out('--------------------------------')
                     self.angle_search += 1
                     jump = int(self.f8*self.f3)
                     if jump < 1: # the lowest jump increment should be 1
                         jump = 1
-                    print(f"Angle of extrapolation exceeded {self.f5}°, {jump} levels will be increased")
+                    self.store_out(f"Angle of extrapolation exceeded {self.f5}°, {jump} levels will be increased")
                     
                     if self.angle_search <= (1+self.angle_amp):
                         factor = ((-1)**self.angle_key)
-                        print(f"Wave factor = {factor}")
+                        self.store_out(f"Wave factor = {factor}")
                         self.frame_count = self.frame_count + factor*jump
                     else:
                         self.angle_amp += self.f11
@@ -262,15 +331,20 @@ class SpiralSearchClass:
                     centroid[0, 2] = self.levels[self.frame_count]
             else:
                 self.frame_count = np.size(self.levels) # end of the animation
-            print(f"Extrapolation at {100*perc_h:.2f}% of the height")
+            self.store_out(f"Extrapolation at {100*self.perc_h:.2f}% of the height")
         return centroid
 
     def run_animation(self, FPS):
-        print('\n\n', 30*'=','Spiral Search 1.0', 30*'='),
+        self.store_out('================================')
+        self.store_out('        Spiral Search 1.0       ')
+        self.store_out('================================')
         self.timer = app.Timer(interval=(1/FPS), connect=self.on_timer_update, start=True)
+        app.run()
 
     def run_searcher(self):
-        print('\n\n', 30*'=','Spiral Search 1.0', 30*'=')
+        self.store_out('================================')
+        self.store_out('        Spiral Search 1.0       ')
+        self.store_out('================================')
         running = True
         while running:
             if self.frame_count == 0:
@@ -295,17 +369,18 @@ class SpiralSearchClass:
 
             elif self.f6 <= self.frame_count and self.frame_count < (np.size(self.levels)-1):
                 if self.level_cut:
-                    print("Spiral search finished")
+                    self.store_out("Spiral search finished")
                     running = False
                 centroid = self.find_centroid()
                 self.coords = np.append(self.coords, centroid, axis=0)
             else:
-                print("Spiral search finished")
+                self.store_out("Spiral search finished")
                 running = False
-                return
     
     def on_timer_update(self, ev):
+        self.store_out(f"Frame {self.frame_count}")
         if self.frame_count == 0:
+            self.store_out('First centrois calculation')
             self.find_disc(self.levels[self.frame_count], self.f1)
             centroid = np.mean(self.CUdata[self.mask], axis=0).reshape(1,3)
             self.true_centroid = centroid
@@ -320,6 +395,7 @@ class SpiralSearchClass:
             self.frame_count += 1
 
         elif 0 < self.frame_count and self.frame_count < self.f6:
+            self.store_out('No centroid search mechanisms are being used')
             self.find_disc(self.levels[self.frame_count], self.f1)
             mask_check = np.count_nonzero(self.mask)
             if mask_check != 0:
@@ -338,25 +414,29 @@ class SpiralSearchClass:
         elif self.f6 <= self.frame_count and self.frame_count < (np.size(self.levels)-1):
             if self.level_cut:
                 self.canvas.update()
-                print("Animation finished")
+                self.store_out("Animation finished")
                 self.timer.stop()
             else:
                 centroid = self.find_centroid()
-                print(f"Frame {self.frame_count}")
                 self.coords = np.append(self.coords, centroid, axis=0)
                 # update canvas
                 self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
                 self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
                 self.canvas.update()
         else:            
-            print("Animation finished")
+            self.store_out("Animation finished")
             self.timer.stop()
     
-    def export_gif(self):
-        print(f"A gerar GIF com {len(self.frames)} frames... aguarde.")
-        # O parâmetro 'fps' define a velocidade de reprodução
-        imageio.mimsave(self.gifname, self.frames, fps=15)
-        print(f"GIF guardado com sucesso como {self.gifname}!")
+    # def export_gif(self):
+    #     self.store_out(f"A gerar GIF com {len(self.frames)} frames... aguarde.")
+    #     # O parâmetro 'fps' define a velocidade de reprodução
+    #     imageio.mimsave(self.gifname, self.frames, fps=15)
+    #     self.store_out(f"GIF guardado com sucesso como {self.gifname}!")
+
+    def invert_spiral(self, spline_invert=True):
+        self.CUdata[:,-1] = abs(self.CUdata[:,-1] - self.Zheight)
+        if spline_invert:
+            self.coords[:,-1] = abs(self.coords[:,-1] - self.Zheight)
 
 class SpiralPropsClass:
     def __init__(self):
@@ -400,18 +480,43 @@ class SpiralPropsClass:
         self.theta = np.reshape([angle(dim=2, point1=ref, point2=point) for point in self.spiral_smoothed[:, :2]], (len(self.spiral_smoothed)))
 
     def lead_angle(self):
-        self.lead = np.zeros((len(self.theta)), dtype=float)
+        self.build_angle()
+        self.lead = np.zeros((len(self.theta)-1, 2), dtype=float)
         for i in range(1, len(self.theta)):
             T = [(self.spiral_smoothed[i, j]-self.spiral_smoothed[i-1, j])/(self.theta[i]) for j in range(3)]
-            self.lead[i] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
+            self.lead[i-1, 1] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
+            if np.isnan(self.lead[i-1, 1]) and i > 1:
+                self.lead[i-1, 1] = self.lead[i-2, 1]
+            self.lead[i-1, 0] = (self.spiral_smoothed[i, 2] + self.spiral_smoothed[i-1, 2]) / 2
+            self.lead[i-1, 1] = abs(np.rad2deg(self.lead[i-1, 1]))
 
-    # def lead_angle_span(self, span, s):
-    #     self.lead = np.zeros((len(self.theta)), dtype=float)
-    #     for step in range(1, (len(self.theta)-span), span):
-    #         sample = self.spiral_smoothed[step:(step+span), :]
-    #         dtheta = angle(dim=2, point1=sample[0, :2], point2=sample[-1, :2])
+        if self.lead[:, 0].max() > 1000:
+            self.lead[:, 0] /= 1000
+
+    def lead_angle_span(self, span):
+        nsamples = int(len(self.spiral_smoothed)/span)
+        self.lead = np.zeros((nsamples, 2), dtype=float)
+        # samplelead = np.zeros((span), dtype=float)
+        count = 0
+        for step in range(0, (len(self.spiral_smoothed)-span), span):
+            sample = self.spiral_smoothed[step:(step+span), :]
+            dtheta = angle(dim=2, point1=sample[0, :2], point2=sample[-1, :2]) # angle between the first and last points
+            T = [(sample[0, j]-sample[-1, j])/(dtheta) for j in range(3)] 
+            self.lead[count, 0] = np.mean([sample[0, 0],sample[-1, 0]]) # mean sample height
+            self.lead[count, 1] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))[0,0] # mean sample lead
+            self.lead[count, 1] = np.rad2deg(self.lead[count, 1])
+            count+=1
+
+            # for i range(len(sample)):
+            #     idtheta = angle(dim=2, point1=sample[i, j], point2=sample[i-1, j])
+            #     T = [(sample[i, j]-sample[i-1, j])/(idtheta) for j in range(3)]
+            #     samplelead[i] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
+            # self.lead[step, 0] = np.mean(sample[:,0]) # mean of sample heights
+            # self.lead[step, 1] = np.mean(samplelead) # mean of sample lead angles 
+
+        if self.lead[:, 0].max() > 1000:
+            self.lead[:, 0] /= 1000
             
-    #         T = [(self.spiral_smoothed[i, j]-self.spiral_smoothed[i-1, j])/(self.theta[i]) for j in range(3)]
-    #         self.lead[i] = np.atan(T[-1]/np.sqrt((T[0]**2 + T[1]**2)))
+
+
         
-    #     self.lead = gaussian_filter1d(self.lead, sigma=s)
