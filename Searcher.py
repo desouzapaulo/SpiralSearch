@@ -66,6 +66,10 @@ class SpiralSearchClass:
         filepath = os.path.join(root, f"{name}_Spiral_Points.csv")
         np.savetxt(filepath, self.coords, delimiter=";")
 
+        filepath = os.path.join(root, f"{name}_porps.csv")
+        props = np.array([[self.perc_h, (self.perc_h*self.Zheight)]], dtype=float)
+        np.savetxt(fname=filepath, X=props, delimiter=';', header='zone_3_height(%);zone_3_height(mm)')
+
     def SET_parameters(self, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, F13):
         h = self.Zheight - self.Zfloor  # Height of the spiral
         self.f1 = F1*h                  # thickness of the disc found at certain level
@@ -388,7 +392,7 @@ class SpiralSearchClass:
             # update canvas
             self.scatter.set_data(pos=self.CUdata, face_color=self.CU_color, size=self.CU_size)
             self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
-            self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
+            self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size, edge_color=self.spline_color)
             self.canvas.update()
             self.view.camera.set_range()
             # update frame count
@@ -406,7 +410,7 @@ class SpiralSearchClass:
                 self.f6 += 2
             # update canvas
             self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
-            self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
+            self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size, edge_color=self.spline_color)
             self.canvas.update()
             # update frame count        
             self.frame_count += 1
@@ -421,7 +425,7 @@ class SpiralSearchClass:
                 self.coords = np.append(self.coords, centroid, axis=0)
                 # update canvas
                 self.scatter1.set_data(pos=self.CUdata[self.mask], face_color=self.level_color, size=self.level_size)
-                self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size)
+                self.scatter2.set_data(pos=self.coords, face_color=self.spline_color, size=self.spline_size, edge_color=self.spline_color)
                 self.canvas.update()
         else:            
             self.store_out("Animation finished")
